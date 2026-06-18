@@ -83,11 +83,7 @@ Agent:  [commits] [cleans up REVIEW.md and REVIEW.md.backup]
 
 The agent extracts feedback from *whatever you wrote* — inline comments, live code edits, half-sentences, rage-typing. It diffs against the backup and reads everything you touched.
 
-Below is REVIEW.md after the user has been in it for 5 minutes. <span style="color:green">Green lines</span> are what the user added. Red are what the user removed or replaced.
-
----
-
-**`REVIEW.md` (annotated by user)**
+Below is `diff REVIEW.md.backup REVIEW.md` — what the agent sees when you say "Review complete". Lines prefixed `+` are yours (green). Everything else was already there.
 
 ```diff
  # Diff Review
@@ -104,23 +100,18 @@ Below is REVIEW.md after the user has been in it for 5 minutes. <span style="col
 +NO this is wrong btw the old one was fine for our traffic, the burst thing
 +only matters at scale we don't have. but whatever lets see it
  
- ```diff
- - const key = `rl:${userId}:${Math.floor(Date.now() / WINDOW_MS)}`
- - const count = await redis.incr(key)
- - await redis.expire(key, WINDOW_MS / 1000)
- + const now = Date.now()
- + const windowStart = now - WINDOW_MS
- + await redis.zremrangebyscore(key, 0, windowStart)
- + const count = await redis.zcard(key)
- + await redis.zadd(key, now, `${now}-${Math.random()}`)
- ```
- 
-+Math.random() IN A KEY?? no. use crypto.randomUUID() or just a counter. this
-+will cause collisions under load. also where is the TTL set on the sorted set?
-+if the key never expires we're going to leak memory in redis forever
+   removed: const key = `rl:${userId}:${Math.floor(Date.now() / WINDOW_MS)}`
+   removed: const count = await redis.incr(key)
+   removed: await redis.expire(key, WINDOW_MS / 1000)
+   added:   const now = Date.now()
+   added:   const windowStart = now - WINDOW_MS
+   added:   await redis.zremrangebyscore(key, 0, windowStart)
+   added:   const count = await redis.zcard(key)
+   added:   await redis.zadd(key, now, `${now}-${Math.random()}`)
++           ^^^^ Math.random() IN A KEY?? use crypto.randomUUID(). collisions under load.
 +
-+- await redis.expire(key, WINDOW_MS / 1000)
-++ await redis.expire(key, Math.ceil(WINDOW_MS / 1000) * 2)   <-- add this back, at least 2x window
++  also no TTL set on the sorted set — leaks redis memory forever
++  add back: await redis.expire(key, Math.ceil(WINDOW_MS / 1000) * 2)
  
  ---
  
@@ -129,20 +120,15 @@ Below is REVIEW.md after the user has been in it for 5 minutes. <span style="col
  **What changed:** Wired new limiter into express middleware
  **Why:** Apply rate limit before route handlers
  
- ```diff
- - import { checkLimit } from './fixed'
- + import { checkLimit } from './sliding'
+   removed: import { checkLimit } from './fixed'
+   added:   import { checkLimit } from './sliding'
  
-   export const rateLimitMiddleware = async (req, res, next) => {
- -   const allowed = await checkLimit(req.user.id)
- +   const allowed = await checkLimit(req.user?.id ?? req.ip)
- ```
- 
-+ok the fallback to req.ip is actually good, keep that
+   removed: const allowed = await checkLimit(req.user.id)
+   added:   const allowed = await checkLimit(req.user?.id ?? req.ip)
++           ^^^^ ok the fallback to req.ip is actually good, keep that
 +
-+but this whole middleware needs a try/catch — if redis is down we're going
-+to 500 every request. should fail open (allow the request) and log the error.
-+add that.
++  whole middleware needs a try/catch — if redis is down we 500 every request
++  should fail open (allow the request) and log the error. add that.
  
  ---
  
@@ -151,14 +137,11 @@ Below is REVIEW.md after the user has been in it for 5 minutes. <span style="col
  **What changed:** Added WINDOW_MS and MAX_REQUESTS constants
  **Why:** Centralise config rather than magic numbers
  
- ```diff
- + export const WINDOW_MS = 60_000
- + export const MAX_REQUESTS = 100
- ```
- 
+   added: export const WINDOW_MS = 60_000
+   added: export const MAX_REQUESTS = 100
++
 +these should be env vars not hardcoded. RATE_LIMIT_WINDOW_MS and
-+RATE_LIMIT_MAX_REQUESTS. add defaults that match what's here now so nothing
-+breaks
++RATE_LIMIT_MAX_REQUESTS. add defaults matching current values so nothing breaks
 ```
 
 ---
