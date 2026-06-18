@@ -83,63 +83,50 @@ Agent:  [commits] [cleans up REVIEW.md and REVIEW.md.backup]
 
 The agent extracts feedback from *whatever you wrote* — inline comments, live code edits, half-sentences, rage-typing. It diffs against the backup and reads everything you touched.
 
-Below is `diff REVIEW.md.backup REVIEW.md` — what the agent sees when you say "Review complete". Green lines (`+`) are yours. The `-`/`+` pairs show lines you edited in place, with your text injected wherever you felt like putting it.
+$\textcolor{red}{\text{red = agent removed}}$ · $\textcolor{green}{\text{green = agent added}}$ · $\textcolor{blue}{\text{blue = your edits}}$
 
-```diff
- # Diff Review
- 
- > Agent: Rewrote rate limiter to use sliding window instead of fixed bucket
- 
-+wait why did we need this again? the fixed bucket was shipping fine
- 
- ---
- 
- ## `src/ratelimit/limiter.ts`
- 
- **What changed:** Replaced fixed-window counter with sliding window using Redis sorted sets
--**Why:** Fixed window allows burst at window boundary (double the limit in 2*epsilon time)
-+**Why:** Fixed window allows burst at window boundary (double the limit in 2*epsilon time) ok fine valid but this only matters at scale we don't have yet
- 
-   removed: const key = `rl:${userId}:${Math.floor(Date.now() / WINDOW_MS)}`
-   removed: const count = await redis.incr(key)
-   removed: await redis.expire(key, WINDOW_MS / 1000)
-   added:   const now = Date.now()
-   added:   const windowStart = now - WINDOW_MS
-   added:   await redis.zremrangebyscore(key, 0, windowStart)
-   added:   const count = await redis.zcard(key)
--  added:   await redis.zadd(key, now, `${now}-${Math.random()}`)
-+  added:   await redis.zadd(key, now, `${now}-${Math.random()}`) Math.random() IN A KEY?? use crypto.randomUUID(). collisions under load
--  added:   // TTL not set
-+  added:   // TTL not set THIS WILL LEAK MEMORY. add redis.expire(key, Math.ceil(WINDOW_MS / 1000) * 2) back
- 
- ---
- 
- ## `src/ratelimit/middleware.ts`
- 
- **What changed:** Wired new limiter into express middleware
- **Why:** Apply rate limit before route handlers
- 
-   removed: import { checkLimit } from './fixed'
-   added:   import { checkLimit } from './sliding'
- 
--  removed: const allowed = await checkLimit(req.user.id)
-+  removed: const allowed = await checkLimit(req.user.id) good riddance
-   added:   const allowed = await checkLimit(req.user?.id ?? req.ip)
-+
-+  whole thing needs try/catch. if redis is down this 500s every request. fail open + log.
- 
- ---
- 
- ## `src/ratelimit/config.ts`
- 
- **What changed:** Added WINDOW_MS and MAX_REQUESTS constants
- **Why:** Centralise config rather than magic numbers
- 
--  added: export const WINDOW_MS = 60_000
-+  added: export const WINDOW_MS = 60_000 env var. RATE_LIMIT_WINDOW_MS. default this value
--  added: export const MAX_REQUESTS = 100
-+  added: export const MAX_REQUESTS = 100 same. RATE_LIMIT_MAX_REQUESTS
-```
+---
+
+**`REVIEW.md` after 5 minutes in your editor:**
+
+$\textcolor{blue}{\text{wait why did we need this again? the fixed bucket was shipping fine}}$
+
+**`src/ratelimit/limiter.ts`**<br>
+**What changed:** Replaced fixed-window counter with sliding window<br>
+$\textcolor{blue}{\text{**Why:** Fixed window allows burst at window boundary (double the limit in 2x time) ok fine valid but only matters at scale we dont have yet}}$
+
+$\textcolor{red}{\text{removed: const key = userId + ":" + Math.floor(Date.now() / WINDOW\_MS)}}$<br>
+$\textcolor{red}{\text{removed: const count = await redis.incr(key)}}$<br>
+$\textcolor{red}{\text{removed: await redis.expire(key, WINDOW\_MS / 1000)}}$<br>
+$\textcolor{green}{\text{added:   const now = Date.now()}}$<br>
+$\textcolor{green}{\text{added:   const windowStart = now - WINDOW\_MS}}$<br>
+$\textcolor{green}{\text{added:   await redis.zremrangebyscore(key, 0, windowStart)}}$<br>
+$\textcolor{green}{\text{added:   const count = await redis.zcard(key)}}$<br>
+$\textcolor{blue}{\text{added:   await redis.zadd(key, now, now + "-" + Math.random())  Math.random() IN A KEY?? use crypto.randomUUID(). collisions under load}}$<br>
+$\textcolor{blue}{\text{added:   // TTL not set  THIS WILL LEAK MEMORY. add redis.expire(key, Math.ceil(WINDOW\_MS / 1000) * 2) back}}$
+
+---
+
+**`src/ratelimit/middleware.ts`**<br>
+**What changed:** Wired new limiter into express middleware<br>
+**Why:** Apply rate limit before route handlers
+
+$\textcolor{red}{\text{removed: import checkLimit from "./fixed"}}$<br>
+$\textcolor{green}{\text{added:   import checkLimit from "./sliding"}}$<br>
+$\textcolor{blue}{\text{removed: const allowed = await checkLimit(req.user.id)  good riddance}}$<br>
+$\textcolor{green}{\text{added:   const allowed = await checkLimit(req.user?.id ?? req.ip)}}$<br>
+$\textcolor{blue}{\text{whole thing needs try/catch. if redis is down this 500s every request. fail open + log.}}$
+
+---
+
+**`src/ratelimit/config.ts`**<br>
+**What changed:** Added WINDOW\_MS and MAX\_REQUESTS constants<br>
+**Why:** Centralise config rather than magic numbers
+
+$\textcolor{blue}{\text{added:   export const WINDOW\_MS = 60000  env var. RATE\_LIMIT\_WINDOW\_MS. default this value}}$<br>
+$\textcolor{blue}{\text{added:   export const MAX\_REQUESTS = 100  same. RATE\_LIMIT\_MAX\_REQUESTS}}$
+
+---
 
 ---
 
