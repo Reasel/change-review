@@ -83,22 +83,22 @@ Agent:  [commits] [cleans up REVIEW.md and REVIEW.md.backup]
 
 The agent extracts feedback from *whatever you wrote* — inline comments, live code edits, half-sentences, rage-typing. It diffs against the backup and reads everything you touched.
 
-Below is `diff REVIEW.md.backup REVIEW.md` — what the agent sees when you say "Review complete". Lines prefixed `+` are yours (green). Everything else was already there.
+Below is `diff REVIEW.md.backup REVIEW.md` — what the agent sees when you say "Review complete". Green lines (`+`) are yours. The `-`/`+` pairs show lines you edited in place, with your text injected wherever you felt like putting it.
 
 ```diff
  # Diff Review
  
  > Agent: Rewrote rate limiter to use sliding window instead of fixed bucket
  
++wait why did we need this again? the fixed bucket was shipping fine
+ 
  ---
  
  ## `src/ratelimit/limiter.ts`
  
  **What changed:** Replaced fixed-window counter with sliding window using Redis sorted sets
- **Why:** Fixed window allows burst at window boundary (double the limit in 2*epsilon time)
- 
-+NO this is wrong btw the old one was fine for our traffic, the burst thing
-+only matters at scale we don't have. but whatever lets see it
+-**Why:** Fixed window allows burst at window boundary (double the limit in 2*epsilon time)
++**Why:** Fixed window allows burst at window boundary (double the limit in 2*epsilon time) ok fine valid but this only matters at scale we don't have yet
  
    removed: const key = `rl:${userId}:${Math.floor(Date.now() / WINDOW_MS)}`
    removed: const count = await redis.incr(key)
@@ -107,11 +107,10 @@ Below is `diff REVIEW.md.backup REVIEW.md` — what the agent sees when you say 
    added:   const windowStart = now - WINDOW_MS
    added:   await redis.zremrangebyscore(key, 0, windowStart)
    added:   const count = await redis.zcard(key)
-   added:   await redis.zadd(key, now, `${now}-${Math.random()}`)
-+           ^^^^ Math.random() IN A KEY?? use crypto.randomUUID(). collisions under load.
-+
-+  also no TTL set on the sorted set — leaks redis memory forever
-+  add back: await redis.expire(key, Math.ceil(WINDOW_MS / 1000) * 2)
+-  added:   await redis.zadd(key, now, `${now}-${Math.random()}`)
++  added:   await redis.zadd(key, now, `${now}-${Math.random()}`) Math.random() IN A KEY?? use crypto.randomUUID(). collisions under load
+-  added:   // TTL not set
++  added:   // TTL not set THIS WILL LEAK MEMORY. add redis.expire(key, Math.ceil(WINDOW_MS / 1000) * 2) back
  
  ---
  
@@ -123,12 +122,11 @@ Below is `diff REVIEW.md.backup REVIEW.md` — what the agent sees when you say 
    removed: import { checkLimit } from './fixed'
    added:   import { checkLimit } from './sliding'
  
-   removed: const allowed = await checkLimit(req.user.id)
+-  removed: const allowed = await checkLimit(req.user.id)
++  removed: const allowed = await checkLimit(req.user.id) good riddance
    added:   const allowed = await checkLimit(req.user?.id ?? req.ip)
-+           ^^^^ ok the fallback to req.ip is actually good, keep that
 +
-+  whole middleware needs a try/catch — if redis is down we 500 every request
-+  should fail open (allow the request) and log the error. add that.
++  whole thing needs try/catch. if redis is down this 500s every request. fail open + log.
  
  ---
  
@@ -137,11 +135,10 @@ Below is `diff REVIEW.md.backup REVIEW.md` — what the agent sees when you say 
  **What changed:** Added WINDOW_MS and MAX_REQUESTS constants
  **Why:** Centralise config rather than magic numbers
  
-   added: export const WINDOW_MS = 60_000
-   added: export const MAX_REQUESTS = 100
-+
-+these should be env vars not hardcoded. RATE_LIMIT_WINDOW_MS and
-+RATE_LIMIT_MAX_REQUESTS. add defaults matching current values so nothing breaks
+-  added: export const WINDOW_MS = 60_000
++  added: export const WINDOW_MS = 60_000 env var. RATE_LIMIT_WINDOW_MS. default this value
+-  added: export const MAX_REQUESTS = 100
++  added: export const MAX_REQUESTS = 100 same. RATE_LIMIT_MAX_REQUESTS
 ```
 
 ---
