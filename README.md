@@ -95,15 +95,15 @@ $\textcolor{blue}{\text{wait why did we need this again? the fixed bucket was sh
 **What changed:** Replaced fixed-window counter with sliding window<br>
 $\textcolor{blue}{\text{**Why:** Fixed window allows burst at window boundary (double the limit in 2x time) ok fine valid but only matters at scale we dont have yet}}$
 
-$\textcolor{red}{\text{removed: const key = userId + ":" + Math.floor(Date.now() / WINDOW\_MS)}}$<br>
+$\textcolor{red}{\text{removed: const key = userId + ":" + Math.floor(Date.now() / windowMs)}}$<br>
 $\textcolor{red}{\text{removed: const count = await redis.incr(key)}}$<br>
-$\textcolor{red}{\text{removed: await redis.expire(key, WINDOW\_MS / 1000)}}$<br>
+$\textcolor{red}{\text{removed: await redis.expire(key, windowMs / 1000)}}$<br>
 $\textcolor{green}{\text{added:   const now = Date.now()}}$<br>
-$\textcolor{green}{\text{added:   const windowStart = now - WINDOW\_MS}}$<br>
+$\textcolor{green}{\text{added:   const windowStart = now - windowMs}}$<br>
 $\textcolor{green}{\text{added:   await redis.zremrangebyscore(key, 0, windowStart)}}$<br>
 $\textcolor{green}{\text{added:   const count = await redis.zcard(key)}}$<br>
 $\textcolor{blue}{\text{added:   await redis.zadd(key, now, now + "-" + Math.random())  Math.random() IN A KEY?? use crypto.randomUUID(). collisions under load}}$<br>
-$\textcolor{blue}{\text{added:   // TTL not set  THIS WILL LEAK MEMORY. add redis.expire(key, Math.ceil(WINDOW\_MS / 1000) * 2) back}}$
+$\textcolor{blue}{\text{added:   // TTL not set  THIS WILL LEAK MEMORY. add redis.expire(key, Math.ceil(windowMs / 1000) * 2) back}}$
 
 ---
 
@@ -120,11 +120,11 @@ $\textcolor{blue}{\text{whole thing needs try/catch. if redis is down this 500s 
 ---
 
 **`src/ratelimit/config.ts`**<br>
-**What changed:** Added WINDOW\_MS and MAX\_REQUESTS constants<br>
+**What changed:** Added windowMs and maxRequests constants<br>
 **Why:** Centralise config rather than magic numbers
 
-$\textcolor{blue}{\text{added:   export const WINDOW\_MS = 60000  env var. RATE\_LIMIT\_WINDOW\_MS. default this value}}$<br>
-$\textcolor{blue}{\text{added:   export const MAX\_REQUESTS = 100  same. RATE\_LIMIT\_MAX\_REQUESTS}}$
+$\textcolor{blue}{\text{added:   export const windowMs = 60000  env var. RATE LIMIT WINDOW MS. default this value}}$<br>
+$\textcolor{blue}{\text{added:   export const maxRequests = 100  same. RATE LIMIT MAX REQUESTS}}$
 
 ---
 
