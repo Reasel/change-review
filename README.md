@@ -42,6 +42,8 @@ Do a change review before we commit.
 
 ## Example workflow
 
+### Simple
+
 ```
 You:    Refactor the auth module to use JWT instead of sessions.
 
@@ -75,6 +77,97 @@ Agent:  Found your note on SECRET. Moving it to process.env.JWT_SECRET
 You:    Commit it.
 
 Agent:  [commits] [cleans up REVIEW.md and REVIEW.md.backup]
+```
+
+### Messy (real-world)
+
+The agent extracts feedback from *whatever you wrote* — inline comments, live code edits, half-sentences, rage-typing. It diffs against the backup and reads everything you touched.
+
+REVIEW.md after the user has been in it for 5 minutes:
+
+```markdown
+# Diff Review
+
+> Agent: Rewrote rate limiter to use sliding window instead of fixed bucket
+
+---
+
+## `src/ratelimit/limiter.ts`
+
+**What changed:** Replaced fixed-window counter with sliding window using Redis sorted sets
+**Why:** Fixed window allows burst at window boundary (double the limit in 2*epsilon time)
+
+NO this is wrong btw the old one was fine for our traffic, the burst thing
+only matters at scale we don't have. but whatever lets see it
+
+```diff
+- const key = `rl:${userId}:${Math.floor(Date.now() / WINDOW_MS)}`
+- const count = await redis.incr(key)
+- await redis.expire(key, WINDOW_MS / 1000)
++ const now = Date.now()
++ const windowStart = now - WINDOW_MS
++ await redis.zremrangebyscore(key, 0, windowStart)
++ const count = await redis.zcard(key)
++ await redis.zadd(key, now, `${now}-${Math.random()}`)
+```
+
+Math.random() IN A KEY?? no. use crypto.randomUUID() or just a counter. this
+will cause collisions under load. also where is the TTL set on the sorted set?
+if the key never expires we're going to leak memory in redis forever
+
+- await redis.expire(key, WINDOW_MS / 1000)
++ await redis.expire(key, Math.ceil(WINDOW_MS / 1000) * 2)   <-- add this back, at least 2x window
+
+---
+
+## `src/ratelimit/middleware.ts`
+
+**What changed:** Wired new limiter into express middleware
+**Why:** Apply rate limit before route handlers
+
+```diff
+- import { checkLimit } from './fixed'
++ import { checkLimit } from './sliding'
+
+  export const rateLimitMiddleware = async (req, res, next) => {
+-   const allowed = await checkLimit(req.user.id)
++   const allowed = await checkLimit(req.user?.id ?? req.ip)
+```
+
+ok the fallback to req.ip is actually good, keep that
+
+but this whole middleware needs a try/catch — if redis is down we're going
+to 500 every request. should fail open (allow the request) and log the error.
+add that.
+
+---
+
+## `src/ratelimit/config.ts`
+
+**What changed:** Added WINDOW_MS and MAX_REQUESTS constants
+**Why:** Centralise config rather than magic numbers
+
+```diff
++ export const WINDOW_MS = 60_000
++ export const MAX_REQUESTS = 100
+```
+
+these should be env vars not hardcoded. RATE_LIMIT_WINDOW_MS and
+RATE_LIMIT_MAX_REQUESTS. add defaults that match what's here now so nothing
+breaks
+```
+
+```
+You:    Review complete.
+
+Agent:  Got it. Four things to fix:
+        1. Replace Math.random() in zadd key with crypto.randomUUID()
+        2. Add redis.expire() back on the sorted set at 2× window duration
+        3. Wrap middleware in try/catch, fail open on Redis errors
+        4. Move WINDOW_MS and MAX_REQUESTS to env vars with current values as defaults
+        Making those now...
+        [makes changes]
+        Done. Another round or ready to commit?
 ```
 
 ## Compatibility
