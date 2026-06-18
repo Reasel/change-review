@@ -44,15 +44,25 @@ cp REVIEW.md REVIEW.md.backup
 
 ### 3. Open in editor
 
+Detect editor in order: `$VISUAL` → `$EDITOR`. If set, open it:
+
 ```bash
-${VISUAL:-${EDITOR:-}} REVIEW.md
+${VISUAL:-${EDITOR}} REVIEW.md
 ```
 
-If `$VISUAL`/`$EDITOR` is unset or GUI (returns immediately), tell the user:
+If neither is set, ask the user:
 
-> REVIEW.md is ready. Open it in your editor, annotate freely anywhere in the file, then say **"Review complete"** when done.
+> Which editor should I open REVIEW.md in? (e.g. code, vim, nano, subl)
 
-If terminal editor (vim/nano/etc), the shell blocks until closed — just wait, then skip to step 4 automatically.
+Then run their answer:
+
+```bash
+<editor> REVIEW.md
+```
+
+Never instruct the user to open the file themselves — always open it for them or ask what to use.
+
+Terminal editors (vim/nano/etc) block until closed — wait for exit, then proceed to step 5 automatically. GUI editors return immediately — wait for the user to say **"Review complete"**.
 
 ### 4. Wait for "Review complete"
 

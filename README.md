@@ -46,8 +46,11 @@ Do a change review before we commit.
 You:    Refactor the auth module to use JWT instead of sessions.
 
 Agent:  [makes changes]
-        REVIEW.md is ready. Open it in your editor, annotate freely,
-        then say "Review complete" when done.
+        Which editor should I open REVIEW.md in?
+
+You:    VS Code
+
+Agent:  [runs: code REVIEW.md]
 
 # You open REVIEW.md and see:
 #
